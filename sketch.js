@@ -19,11 +19,12 @@ const GESTURES = {
 function setup() {
   createCanvas(windowWidth, windowHeight);
 
-  // 初始化攝影機 (不使用 p5 的 createCapture 以避免衝突)
-  capture = document.createElement('video');
-  capture.setAttribute('playsinline', '');
-  capture.width = 640;
-  capture.height = 480;
+  console.log("提示：如果攝影機無法啟動，你可以使用鍵盤模擬：1(石頭), 2(布), 3(剪刀), 4(繼續), 5(結束)");
+
+  // 改用 p5 內建的 createCapture，對 p5.js 的 image() 支援度更好
+  capture = createCapture(VIDEO);
+  capture.size(640, 480);
+  capture.hide(); // 隱藏原生在畫布下方的 HTML 標籤
 
   // 初始化 MediaPipe Hands
   hands = new Hands({
@@ -42,9 +43,9 @@ function setup() {
   hands.onResults(onResults);
 
   // 啟動攝影機工具
-  const camera = new Camera(capture, {
+  const camera = new Camera(capture.elt, {
     onFrame: async () => {
-      await hands.send({ image: capture });
+      await hands.send({ image: capture.elt });
     },
     width: 640,
     height: 480
@@ -92,27 +93,36 @@ function classifyHand(landmarks) {
 }
 
 function draw() {
+  // 1. 設置粉嫩背景底色
+  background(255, 220, 230);
+
   // 1. 繪製攝影機畫面 (鏡像處理)
   push();
   translate(width, 0);
   scale(-1, 1);
-  image(capture, 0, 0, width, height);
+
+  // 安全檢查：確保攝影機已準備好畫面（防止因為沒有攝影機而導致程式崩潰）
+  if (capture && capture.elt.videoWidth > 0) {
+    image(capture, 0, 0, width, height);
+  }
   
   // 2. 處理手勢數據並畫出偵測點
   if (predictions && predictions.length > 0) {
     playerHand = classifyHand(predictions[0]);
-    fill(255, 100, 150); // 偵測點也用粉色
+    fill(255, 100, 150); 
     noStroke();
     for (let p of predictions[0]) {
       ellipse(p.x * width, p.y * height, 10, 10);
     }
-  } else {
+  } else if (capture && capture.elt.videoWidth > 0) {
+    // 只有在攝影機有畫面但「沒看到手」時，才重置為 None
+    // 這樣如果攝影機壞了，你的鍵盤模擬輸入才不會被這行程式碼立刻刷掉
     playerHand = 'None';
   }
   pop();
 
   // 3. 覆蓋粉嫩半透明層與裝飾
-  fill(255, 220, 230, 180); // 180 為透明度，讓攝影機畫面若隱若現
+  fill(255, 220, 230, 120); // 降低透明度至 120，讓畫面更清楚
   rect(0, 0, width, height);
 
   drawDecoration();
@@ -122,6 +132,11 @@ function draw() {
   fill(150, 100, 120);
   textSize(24);
   text(`目前手勢：${playerHand}`, width / 2, 50);
+
+  // 如果攝影機還沒啟動，顯示提示
+  if (!capture || capture.elt.videoWidth === 0) {
+    text("攝影機啟動中...", width/2, height/2 + 100);
+  }
   
   if (gameState === 'READY') {
     fill(255, 150, 180, 180); 
